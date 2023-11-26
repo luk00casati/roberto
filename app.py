@@ -14,8 +14,10 @@ from Crypto.Hash import SHA256
 # main -> 0
 # add_frame -> 1
 # asking_frame -> 2
+# creating_master -> 3
+# insert_master -> 4
 
-master_pass = "password"
+master_pass = "null"
 master_pass_encoded = str.encode(master_pass)
 
 fix_salt = b"dC\x9aR\xec\xb3\x8dr\xc4M\\\x8e\x9b\xa9\x1fLS\xe9m +\xbb\x10\xbf\xb7x\xdd\xeb3-'\xb1"
@@ -60,8 +62,8 @@ class Element(QWidget):
         cipher_pass_byte = bytes.fromhex(cipher_pass)
         iv_pass_byte = bytes.fromhex(iv_pass)
         cipher = AES.new(master_key, AES.MODE_CBC, iv_pass_byte)
-        decrypt = unpad(cipher.decrypt(cipher_pass_byte), AES.block_size)
-        self.clear_password = decrypt.decode('UTF-8')
+        decrypt_byte = unpad(cipher.decrypt(cipher_pass_byte), AES.block_size)
+        self.clear_password = decrypt_byte.decode('UTF-8')
         self.hide_password = "***************"
 
         self.Name = QLabel(name, self)
@@ -107,14 +109,14 @@ class DatabaseHandler:
 
             self.cursor.execute('''
                 CREATE TABLE IF NOT EXISTS password_db (
-                    name TEXT UNIQUE NOT NULL,
-                    cipher_pass TEXT NOT NULL,
-                    iv_pass TEXT NOT NULL
+                    name VARCHAR(255) UNIQUE NOT NULL,
+                    cipher_pass VARCHAR(255) NOT NULL,
+                    iv_pass VARCHAR(255) NOT NULL 
                 )''')
 
             self.cursor.execute('''
                 CREATE TABLE IF NOT EXISTS master_hash (
-                    hash TEXT NOT NULL
+                    hash VARCHAR(255) NOT NULL
                 )''')
 
             conn.commit()
@@ -154,6 +156,11 @@ class DatabaseHandler:
     def delete_password(self, name):
         query = 'DELETE FROM password_db WHERE name = ?'
         parameters = (name,)
+        self.execute_query(query, parameters)
+
+    def insert_hash(self, v_hash):
+        query = 'INSERT INTO master_hash (hash) VALUES (?)';
+        parameters = (v_hash)
         self.execute_query(query, parameters)
 
     def __del__(self):
@@ -310,6 +317,9 @@ class Main(QWidget):
         self.setup_asking_screen(name)
         self.stacked_widget.setCurrentIndex(2)
 
+    def show_create_master_password(self):
+        self.stacked_widget.setCurrentIndex(3)
+
     def setup_asking_screen(self, name):
         asking_screen = QWidget(self)
         self.pass_name = name
@@ -335,6 +345,39 @@ class Main(QWidget):
 
     def no_element_delete(self):
         self.show_main_screen()
+
+    def setup_create_master_password(self):
+        create_master = QWidget(self)
+        layout = QVBoxLayout(create_master)
+
+        self.label_create_master = QLabel("choose a master master_password:", create_master)
+        self.line_create_master1 = QLineEdit(create_master)
+        self.line_create_master2 = QLineEdit(create_master)
+        self.button_create_master = QPushButton("enter", create_master)
+        self.error_label_create_master = QLabel("error", create_master)
+        self.error_label_create_master.hide()
+
+        layout.addWidget(self.label_create_master)
+        layout.addWidget(self.line_create_master1)
+        layout.addWidget(self.line_create_master2)
+        layout.addWidget(self.button_create_master)
+        layout.addWidget(self.error_label_create_master)
+
+        self.stacked_widget.addWidget(create_master)
+        self.button_create_master.clicked.connect(self.enter_button_create_master)
+
+    def enter_button_create_master(self):
+        if self.line_create_master1.text() and self.line_create_master2.text() and self.line_create_master1.text() == self.line_create_master2.text():
+            global master_pass
+            master_pass = self.line_create_master1.text()
+            line_encoded = self.line_create_master1.text().str.endcode()
+            hash256 = SHA256.new(line_encoded)
+            hexhash256_hash = hash256.hexdigest()
+            db_handler = DatabaseHandler()
+            db_handler.insert_hash(hexhash256_hash)
+            self.show_main_screen()
+        else:
+            self.error_label_create_master.show()
 
 if __name__ == "__main__":
     app = QApplication()
