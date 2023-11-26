@@ -148,6 +148,11 @@ class DatabaseHandler:
         count = self.fetch_all(query, parameters)[0][0]
         return count == 0
 
+    def detect_master(self):
+        query = 'SELECT COUNT(*) FROM master_hash'
+        count = self.fetch_all(query)[0][0]
+        return count > 0
+
     def add_password(self, name, cipher_pass, iv_pass):
         query = 'INSERT INTO password_db (name, cipher_pass, iv_pass) VALUES (?, ?, ?)'
         parameters = (name, cipher_pass, iv_pass)
@@ -159,14 +164,12 @@ class DatabaseHandler:
         self.execute_query(query, parameters)
 
     def insert_hash(self, v_hash):
-        query = 'INSERT INTO master_hash (hash) VALUES (?)';
-        parameters = (v_hash)
+        query = 'INSERT INTO master_hash (hash) VALUES ?';
+        parameters = (v_hash,)
         self.execute_query(query, parameters)
 
     def __del__(self):
         self.cursor.connection.close()
-
-
 
 class Main(QWidget):
     def __init__(self):
@@ -210,6 +213,9 @@ class Main(QWidget):
         self.add_button_bar.clicked.connect(self.show_add_screen)
         self.search_bar.clicked.connect(self.update_elements)
         self.stacked_widget.addWidget(main_screen)
+        #delete
+        self.option_bar.clicked.connect(self.show_create_master_password)
+        #self.choose_start()
 
     def update_elements(self):
         if not self.text_input_bar.text():
@@ -249,38 +255,38 @@ class Main(QWidget):
         layout = QVBoxLayout(add_screen)
 
         self.add_button_frame = QPushButton("Add", add_screen)
-        self.back = QPushButton("Back", add_screen)
-        self.name_label = QLabel("Name:", add_screen)
-        self.name_line = QLineEdit(add_screen)
-        self.password_label = QLabel("Password:", add_screen)
-        self.password_line = QLineEdit(add_screen)
-        self.rand_gen_button = QPushButton("random gen", add_screen)
-        self.error_label = QLabel("Error", add_screen)
-        self.error_label.hide()
+        self.back_add = QPushButton("Back", add_screen)
+        self.name_label_add = QLabel("Name:", add_screen)
+        self.name_line_add = QLineEdit(add_screen)
+        self.password_label_add = QLabel("Password:", add_screen)
+        self.password_line_add = QLineEdit(add_screen)
+        self.rand_gen_button_add = QPushButton("random gen", add_screen)
+        self.error_label_add = QLabel("Error", add_screen)
+        self.error_label_add.hide()
 
-        layout.addWidget(self.name_label)
-        layout.addWidget(self.name_line)
-        layout.addWidget(self.password_label)
-        layout.addWidget(self.password_line)
-        layout.addWidget(self.rand_gen_button)
+        layout.addWidget(self.name_label_add)
+        layout.addWidget(self.name_line_add)
+        layout.addWidget(self.password_label_add)
+        layout.addWidget(self.password_line_add)
+        layout.addWidget(self.rand_gen_button_add)
         layout.addWidget(self.add_button_frame)
-        layout.addWidget(self.back)
-        layout.addWidget(self.error_label)
+        layout.addWidget(self.back_add)
+        layout.addWidget(self.error_label_add)
 
         self.add_button_frame.clicked.connect(self.add_screen_button)
-        self.rand_gen_button.clicked.connect(self.gen_password)
-        self.back.clicked.connect(self.show_main_screen)
+        self.rand_gen_button_add.clicked.connect(self.gen_password)
+        self.back_add.clicked.connect(self.show_main_screen)
         self.stacked_widget.addWidget(add_screen)
 
     def gen_password(self):
-        self.password_line.setText(generatepassword())
+        self.password_line_add.setText(generatepassword())
 
     def is_name_unique(self, name):
         return self.db_handler.is_name_unique(name)
 
     def add_screen_button(self):
-        name = self.name_line.text()
-        password_clear = self.password_line.text()
+        name = self.name_line_add.text()
+        password_clear = self.password_line_add.text()
 
         if name and password_clear:
             if self.is_name_unique(name):
@@ -293,20 +299,20 @@ class Main(QWidget):
                 ivhex = iv.hex()
 
                 self.db_handler.add_password(name, cipherhex, ivhex)
-                self.name_line.clear()
-                self.password_line.clear()
+                self.name_line_add.clear()
+                self.password_line_add.clear()
                 self.update_elements()
                 self.stacked_widget.setCurrentIndex(0)
-                self.error_label.hide()
+                self.error_label_add.hide()
             else:
-                self.error_label.setText("Name already exists. Please choose a different name.")
-                self.error_label.show()
+                self.error_label_add.setText("Name already exists. Please choose a different name.")
+                self.error_label_add.show()
         else:
-            self.error_label.setText("Name and password cannot be empty.")
-            self.error_label.show()
+            self.error_label_add.setText("Name and password cannot be empty.")
+            self.error_label_add.show()
 
     def show_add_screen(self):
-        self.error_label.hide()
+        self.error_label_add.hide()
         self.stacked_widget.setCurrentIndex(1)
 
     def show_main_screen(self):
@@ -319,6 +325,9 @@ class Main(QWidget):
 
     def show_create_master_password(self):
         self.stacked_widget.setCurrentIndex(3)
+
+    def show_insert_master_password(self):
+        self.stacked_widget.setCurrentIndex(4)
 
     def setup_asking_screen(self, name):
         asking_screen = QWidget(self)
@@ -362,15 +371,17 @@ class Main(QWidget):
         layout.addWidget(self.line_create_master2)
         layout.addWidget(self.button_create_master)
         layout.addWidget(self.error_label_create_master)
+        self.setLayout(layout)
 
         self.stacked_widget.addWidget(create_master)
         self.button_create_master.clicked.connect(self.enter_button_create_master)
 
     def enter_button_create_master(self):
         if self.line_create_master1.text() and self.line_create_master2.text() and self.line_create_master1.text() == self.line_create_master2.text():
-            global master_pass
+            #global master_pass
             master_pass = self.line_create_master1.text()
-            line_encoded = self.line_create_master1.text().str.endcode()
+            line = self.line_create_master1.text()
+            line_encoded = str.encode(line)
             hash256 = SHA256.new(line_encoded)
             hexhash256_hash = hash256.hexdigest()
             db_handler = DatabaseHandler()
@@ -379,6 +390,58 @@ class Main(QWidget):
         else:
             self.error_label_create_master.show()
 
+    def setup_insert_master(self):
+        insert_master = QWidget(self)
+        layout = QVBoxLayout(insert_master)
+
+        self.label_insert_master = QLabel("insert master password:", insert_master)
+        self.line_insert_master = QLineEdit(insert_master)
+        self.button_insert_master = QPushButton("enter", insert_master)
+        self.error_inser_master = QLabel("error", insert_master)
+        self.error_inser_master.hide()
+
+        layout.addWidget(self.label_insert_master)
+        layout.addWidget(self.line_insert_master)
+        layout.addWidget(self.button_insert_master)
+        layout.addWidget(self.error_inser_master)
+        self.setLayout(layout)
+
+        self.stacked_widget.addWidget(insert_master)
+        self.button_insert_master.clicked.connect(self.enter_button_insert_master)
+
+    def is_master_present(self):
+        return self.db_handler.detect_master()
+
+    def enter_button_insert_master(self):
+        if self.line_insert_master.text() and self.check_hash():
+            #global master_pass
+            master_pass = self.line_insert_master.text()
+            self.show_main_screen()
+        else:
+            self.error_inser_master.show()
+
+    def check_hash(self):
+        db_handler = DatabaseHandler()
+        v_hash = db_handler.fetch_all('SELECT * FROM master_hash LIMIT 1')
+        line = self.line_insert_master.text()
+        line_encoded = str.encode(line)
+        hash256 = SHA256.new(line_encoded)
+        hexhash256_hash = hash256.hexdigest()
+        if v_hash == hexhash256_hash:
+            return True
+        else:
+            return False
+
+    def choose_start(self):
+        if self.is_master_present():
+            print("Checking if master is present...")
+            self.show_insert_master_password()
+            print("Master is present. Showing insert master password screen.")
+        else:
+            self.show_create_master_password()
+            print("Master is not present. Showing create master password screen.")
+
+        
 if __name__ == "__main__":
     app = QApplication()
     win = Main()
