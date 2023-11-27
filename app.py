@@ -14,15 +14,18 @@ from Crypto.Hash import SHA256
 # main -> 0
 # add_frame -> 1
 # asking_frame -> 2
-# creating_master -> 3
-# insert_master -> 4
+# creating_master -> 3 *
+# insert_master -> 4 *
 
 master_pass = "null"
-master_pass_encoded = str.encode(master_pass)
 
-fix_salt = b"dC\x9aR\xec\xb3\x8dr\xc4M\\\x8e\x9b\xa9\x1fLS\xe9m +\xbb\x10\xbf\xb7x\xdd\xeb3-'\xb1"
+def gen_masterkey(master_pass):
+    master_pass_encoded = str.encode(master_pass)
 
-master_key = PBKDF2(master_pass_encoded, fix_salt, dkLen=32)
+    fix_salt = b"dC\x9aR\xec\xb3\x8dr\xc4M\\\x8e\x9b\xa9\x1fLS\xe9m +\xbb\x10\xbf\xb7x\xdd\xeb3-'\xb1"
+
+    master_key = PBKDF2(master_pass_encoded, fix_salt, dkLen=32)
+    return master_key
 
 user_name = os.getlogin()
 
@@ -59,31 +62,31 @@ class Element(QWidget):
         self.cipher_pass = cipher_pass
         self.iv_pass = iv_pass
         #decript
-        cipher_pass_byte = bytes.fromhex(cipher_pass)
-        iv_pass_byte = bytes.fromhex(iv_pass)
-        cipher = AES.new(master_key, AES.MODE_CBC, iv_pass_byte)
-        decrypt_byte = unpad(cipher.decrypt(cipher_pass_byte), AES.block_size)
-        self.clear_password = decrypt_byte.decode('UTF-8')
-        self.hide_password = "***************"
+        if master_pass and master_pass != "null":
+            master_key = gen_masterkey(master_pass)
+            cipher_pass_byte = bytes.fromhex(cipher_pass)
+            iv_pass_byte = bytes.fromhex(iv_pass)
+            cipher = AES.new(master_key, AES.MODE_CBC, iv_pass_byte)
+            decrypt_byte = unpad(cipher.decrypt(cipher_pass_byte), AES.block_size)
+            self.clear_password = decrypt_byte.decode('UTF-8')
+            self.hide_password = "***************"
 
-        self.Name = QLabel(name, self)
-        self.Password = QLabel(self.hide_password, self)
-        self.Delete = QPushButton("Delete", self)
-        self.Show = QPushButton("Show", self)
-        self.Copy = QPushButton("Copy", self)
+            self.Name = QLabel(name, self)
+            self.Password = QLabel(self.hide_password, self)
+            self.Delete = QPushButton("Delete", self)
+            self.Show = QPushButton("Show", self)
+            self.Copy = QPushButton("Copy", self)
 
-        self.Delete.clicked.connect(self.delete_button)
-        self.Copy.clicked.connect(self.copy_to_clipboard)
-        self.Show.clicked.connect(self.toggle_password_visibility)
+            self.Delete.clicked.connect(self.delete_button)
+            self.Copy.clicked.connect(self.copy_to_clipboard)
+            self.Show.clicked.connect(self.toggle_password_visibility)
 
-        layout = QHBoxLayout(self)
-        layout.addWidget(self.Name)
-        layout.addWidget(self.Password)
-        layout.addWidget(self.Delete)
-        layout.addWidget(self.Show)
-        layout.addWidget(self.Copy)
-
-        #self.setLayout(layout)
+            layout = QHBoxLayout(self)
+            layout.addWidget(self.Name)
+            layout.addWidget(self.Password)
+            layout.addWidget(self.Delete)
+            layout.addWidget(self.Show)
+            layout.addWidget(self.Copy)
 
     def copy_to_clipboard(self):
         pyperclip.copy(self.clear_password)
@@ -100,7 +103,6 @@ class Element(QWidget):
         else:
             self.Password.setText(self.hide_password)
             self.Show.setText("Show")
-
 
 class DatabaseHandler:
     def __init__(self, db_name="test.db"):
@@ -149,7 +151,7 @@ class DatabaseHandler:
         return count == 0
 
     def detect_master(self):
-        query = 'SELECT COUNT(*) FROM master_hash'
+        query = 'SELECT COUNT(hash) FROM master_hash'
         count = self.fetch_all(query)[0][0]
         return count > 0
 
@@ -159,12 +161,12 @@ class DatabaseHandler:
         self.execute_query(query, parameters)
 
     def delete_password(self, name):
-        query = 'DELETE FROM password_db WHERE name = ?'
+        query = 'DELETE FROM password_db WHERE name = (?)'
         parameters = (name,)
         self.execute_query(query, parameters)
 
     def insert_hash(self, v_hash):
-        query = 'INSERT INTO master_hash (hash) VALUES ?';
+        query = 'INSERT INTO master_hash (hash) VALUES (?)';
         parameters = (v_hash,)
         self.execute_query(query, parameters)
 
@@ -213,9 +215,6 @@ class Main(QWidget):
         self.add_button_bar.clicked.connect(self.show_add_screen)
         self.search_bar.clicked.connect(self.update_elements)
         self.stacked_widget.addWidget(main_screen)
-        #delete
-        self.option_bar.clicked.connect(self.show_create_master_password)
-        #self.choose_start()
 
     def setup_add_screen(self):
         add_screen = QWidget(self)
@@ -368,17 +367,18 @@ class Main(QWidget):
             if self.is_name_unique(name):
                 password_clear_encoded = str.encode(password_clear)
                 #cript
-                cipher = AES.new(master_key, AES.MODE_CBC)
-                cipher_data = cipher.encrypt(pad(password_clear_encoded, AES.block_size))
-                cipherhex = cipher_data.hex()
-                iv = cipher.iv
-                ivhex = iv.hex()
+                if master_pass and master_pass != "null":
+                    master_key = gen_masterkey(master_pass)
+                    cipher = AES.new(master_key, AES.MODE_CBC)
+                    cipher_data = cipher.encrypt(pad(password_clear_encoded, AES.block_size))
+                    cipherhex = cipher_data.hex()
+                    iv = cipher.iv
+                    ivhex = iv.hex()
 
                 self.db_handler.add_password(name, cipherhex, ivhex)
                 self.name_line_add.clear()
                 self.password_line_add.clear()
-                self.update_elements()
-                self.stacked_widget.setCurrentIndex(0)
+                self.show_main_screen()
                 self.error_label_add.hide()
             else:
                 self.error_label_add.setText("Name already exists. Please choose a different name.")
@@ -396,7 +396,7 @@ class Main(QWidget):
         self.show_main_screen()
 
     def enter_button_create_master(self):
-        if self.line_create_master1.text() and self.line_create_master2.text() and self.line_create_master1.text() == self.line_create_master2.text():
+        if self.line_create_master1.text() != "null" and self.line_create_master1.text() and self.line_create_master2.text() and self.line_create_master1.text() == self.line_create_master2.text():
             global master_pass
             master_pass = self.line_create_master1.text()
             line = self.line_create_master1.text()
@@ -422,7 +422,7 @@ class Main(QWidget):
 
     def check_hash(self):
         db_handler = DatabaseHandler()
-        v_hash = db_handler.fetch_all('SELECT * FROM master_hash LIMIT 1')
+        v_hash = db_handler.fetch_all('SELECT hash FROM master_hash LIMIT 1')[0][0]
         line = self.line_insert_master.text()
         line_encoded = str.encode(line)
         hash256 = SHA256.new(line_encoded)
