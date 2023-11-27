@@ -83,7 +83,7 @@ class Element(QWidget):
         layout.addWidget(self.Show)
         layout.addWidget(self.Copy)
 
-        self.setLayout(layout)
+        #self.setLayout(layout)
 
     def copy_to_clipboard(self):
         pyperclip.copy(self.clear_password)
@@ -217,6 +217,110 @@ class Main(QWidget):
         self.option_bar.clicked.connect(self.show_create_master_password)
         #self.choose_start()
 
+    def setup_add_screen(self):
+        add_screen = QWidget(self)
+        layout = QVBoxLayout(add_screen)
+
+        self.add_button_frame = QPushButton("Add", add_screen)
+        self.back_add = QPushButton("Back", add_screen)
+        self.name_label_add = QLabel("Name:", add_screen)
+        self.name_line_add = QLineEdit(add_screen)
+        self.password_label_add = QLabel("Password:", add_screen)
+        self.password_line_add = QLineEdit(add_screen)
+        self.rand_gen_button_add = QPushButton("random gen", add_screen)
+        self.error_label_add = QLabel("Error", add_screen)
+        self.error_label_add.hide()
+
+        layout.addWidget(self.name_label_add)
+        layout.addWidget(self.name_line_add)
+        layout.addWidget(self.password_label_add)
+        layout.addWidget(self.password_line_add)
+        layout.addWidget(self.rand_gen_button_add)
+        layout.addWidget(self.add_button_frame)
+        layout.addWidget(self.back_add)
+        layout.addWidget(self.error_label_add)
+
+        self.add_button_frame.clicked.connect(self.add_screen_button)
+        self.rand_gen_button_add.clicked.connect(self.gen_password)
+        self.back_add.clicked.connect(self.show_main_screen)
+        self.stacked_widget.addWidget(add_screen)
+
+    def setup_asking_screen(self, name):
+        asking_screen = QWidget(self)
+        self.pass_name = name
+        layout = QVBoxLayout(asking_screen)
+
+        self.asking_label = QLabel(f"want you delete {name}?")
+        self.yes_button = QPushButton("yes", asking_screen)
+        self.no_button = QPushButton("no", asking_screen)
+
+        layout.addWidget(self.asking_label)
+        layout.addWidget(self.yes_button)
+        layout.addWidget(self.no_button)
+        self.stacked_widget.addWidget(asking_screen)
+
+        self.no_button.clicked.connect(self.no_element_delete)
+        self.yes_button.clicked.connect(self.yes_element_delete)
+
+    def setup_create_master(self):
+        create_master = QWidget(self)
+        layout = QVBoxLayout(create_master)
+
+        self.label_create_master = QLabel("choose a master master_password:", create_master)
+        self.line_create_master1 = QLineEdit(create_master)
+        self.line_create_master2 = QLineEdit(create_master)
+        self.button_create_master = QPushButton("enter", create_master)
+        self.error_label_create_master = QLabel("error", create_master)
+        self.error_label_create_master.hide()
+
+        layout.addWidget(self.label_create_master)
+        layout.addWidget(self.line_create_master1)
+        layout.addWidget(self.line_create_master2)
+        layout.addWidget(self.button_create_master)
+        layout.addWidget(self.error_label_create_master)
+
+        self.stacked_widget.addWidget(create_master)
+        self.button_create_master.clicked.connect(self.enter_button_create_master)
+
+    def setup_insert_master(self):
+        insert_master = QWidget(self)
+        layout = QVBoxLayout(insert_master)
+
+        self.label_insert_master = QLabel("insert master password:", insert_master)
+        self.line_insert_master = QLineEdit(insert_master)
+        self.button_insert_master = QPushButton("enter", insert_master)
+        self.error_inser_master = QLabel("error", insert_master)
+        self.error_inser_master.hide()
+
+        layout.addWidget(self.label_insert_master)
+        layout.addWidget(self.line_insert_master)
+        layout.addWidget(self.button_insert_master)
+        layout.addWidget(self.error_inser_master)
+
+        self.stacked_widget.addWidget(insert_master)
+        self.button_insert_master.clicked.connect(self.enter_button_insert_master)
+
+    #WHAT?!
+    def show_add_screen(self):
+        self.error_label_add.hide()
+        self.stacked_widget.setCurrentIndex(1)
+
+    def show_main_screen(self):
+        self.update_elements()
+        self.stacked_widget.setCurrentIndex(0)
+
+    def show_asking_screen(self, name):
+        self.setup_asking_screen(name)
+        self.stacked_widget.setCurrentIndex(2)
+
+    def show_create_master_password(self):
+        self.setup_create_master()
+        self.stacked_widget.setCurrentIndex(2)
+
+    def show_insert_master_password(self):
+        self.setup_insert_master()
+        self.stacked_widget.setCurrentIndex(2)
+
     def update_elements(self):
         if not self.text_input_bar.text():
             self.clear_layout(self.scroll_layout)
@@ -249,34 +353,6 @@ class Main(QWidget):
             widget = item.widget()
             if widget:
                 widget.setParent(None)
-
-    def setup_add_screen(self):
-        add_screen = QWidget(self)
-        layout = QVBoxLayout(add_screen)
-
-        self.add_button_frame = QPushButton("Add", add_screen)
-        self.back_add = QPushButton("Back", add_screen)
-        self.name_label_add = QLabel("Name:", add_screen)
-        self.name_line_add = QLineEdit(add_screen)
-        self.password_label_add = QLabel("Password:", add_screen)
-        self.password_line_add = QLineEdit(add_screen)
-        self.rand_gen_button_add = QPushButton("random gen", add_screen)
-        self.error_label_add = QLabel("Error", add_screen)
-        self.error_label_add.hide()
-
-        layout.addWidget(self.name_label_add)
-        layout.addWidget(self.name_line_add)
-        layout.addWidget(self.password_label_add)
-        layout.addWidget(self.password_line_add)
-        layout.addWidget(self.rand_gen_button_add)
-        layout.addWidget(self.add_button_frame)
-        layout.addWidget(self.back_add)
-        layout.addWidget(self.error_label_add)
-
-        self.add_button_frame.clicked.connect(self.add_screen_button)
-        self.rand_gen_button_add.clicked.connect(self.gen_password)
-        self.back_add.clicked.connect(self.show_main_screen)
-        self.stacked_widget.addWidget(add_screen)
 
     def gen_password(self):
         self.password_line_add.setText(generatepassword())
@@ -311,42 +387,6 @@ class Main(QWidget):
             self.error_label_add.setText("Name and password cannot be empty.")
             self.error_label_add.show()
 
-    def show_add_screen(self):
-        self.error_label_add.hide()
-        self.stacked_widget.setCurrentIndex(1)
-
-    def show_main_screen(self):
-        self.update_elements()
-        self.stacked_widget.setCurrentIndex(0)
-
-    def show_asking_screen(self, name):
-        self.setup_asking_screen(name)
-        self.stacked_widget.setCurrentIndex(2)
-
-    def show_create_master_password(self):
-        self.stacked_widget.setCurrentIndex(3)
-
-    def show_insert_master_password(self):
-        self.stacked_widget.setCurrentIndex(4)
-
-    def setup_asking_screen(self, name):
-        asking_screen = QWidget(self)
-        self.pass_name = name
-        layout = QVBoxLayout(asking_screen)
-
-        self.asking_label = QLabel(f"want you delete {name}?")
-        self.yes_button = QPushButton("yes", asking_screen)
-        self.no_button = QPushButton("no", asking_screen)
-
-        layout.addWidget(self.asking_label)
-        layout.addWidget(self.yes_button)
-        layout.addWidget(self.no_button)
-        self.setLayout(layout)
-        self.stacked_widget.addWidget(asking_screen)
-
-        self.no_button.clicked.connect(self.no_element_delete)
-        self.yes_button.clicked.connect(self.yes_element_delete)
-
     def yes_element_delete(self):
         db_handler = DatabaseHandler()
         db_handler.delete_password(self.pass_name)
@@ -355,30 +395,9 @@ class Main(QWidget):
     def no_element_delete(self):
         self.show_main_screen()
 
-    def setup_create_master_password(self):
-        create_master = QWidget(self)
-        layout = QVBoxLayout(create_master)
-
-        self.label_create_master = QLabel("choose a master master_password:", create_master)
-        self.line_create_master1 = QLineEdit(create_master)
-        self.line_create_master2 = QLineEdit(create_master)
-        self.button_create_master = QPushButton("enter", create_master)
-        self.error_label_create_master = QLabel("error", create_master)
-        self.error_label_create_master.hide()
-
-        layout.addWidget(self.label_create_master)
-        layout.addWidget(self.line_create_master1)
-        layout.addWidget(self.line_create_master2)
-        layout.addWidget(self.button_create_master)
-        layout.addWidget(self.error_label_create_master)
-        self.setLayout(layout)
-
-        self.stacked_widget.addWidget(create_master)
-        self.button_create_master.clicked.connect(self.enter_button_create_master)
-
     def enter_button_create_master(self):
         if self.line_create_master1.text() and self.line_create_master2.text() and self.line_create_master1.text() == self.line_create_master2.text():
-            #global master_pass
+            global master_pass
             master_pass = self.line_create_master1.text()
             line = self.line_create_master1.text()
             line_encoded = str.encode(line)
@@ -390,31 +409,12 @@ class Main(QWidget):
         else:
             self.error_label_create_master.show()
 
-    def setup_insert_master(self):
-        insert_master = QWidget(self)
-        layout = QVBoxLayout(insert_master)
-
-        self.label_insert_master = QLabel("insert master password:", insert_master)
-        self.line_insert_master = QLineEdit(insert_master)
-        self.button_insert_master = QPushButton("enter", insert_master)
-        self.error_inser_master = QLabel("error", insert_master)
-        self.error_inser_master.hide()
-
-        layout.addWidget(self.label_insert_master)
-        layout.addWidget(self.line_insert_master)
-        layout.addWidget(self.button_insert_master)
-        layout.addWidget(self.error_inser_master)
-        self.setLayout(layout)
-
-        self.stacked_widget.addWidget(insert_master)
-        self.button_insert_master.clicked.connect(self.enter_button_insert_master)
-
     def is_master_present(self):
         return self.db_handler.detect_master()
 
     def enter_button_insert_master(self):
         if self.line_insert_master.text() and self.check_hash():
-            #global master_pass
+            global master_pass
             master_pass = self.line_insert_master.text()
             self.show_main_screen()
         else:
@@ -434,16 +434,13 @@ class Main(QWidget):
 
     def choose_start(self):
         if self.is_master_present():
-            print("Checking if master is present...")
             self.show_insert_master_password()
-            print("Master is present. Showing insert master password screen.")
         else:
             self.show_create_master_password()
-            print("Master is not present. Showing create master password screen.")
-
         
 if __name__ == "__main__":
     app = QApplication()
     win = Main()
+    win.choose_start()
     win.show()
     sys.exit(app.exec())
