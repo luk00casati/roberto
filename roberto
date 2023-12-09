@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QScrollArea, QPushButton, QLineEdit, QHBoxLayout, QStackedWidget
+from PySide6.QtWidgets import *
 import sys
 import os
 import sqlite3
@@ -7,10 +7,13 @@ import random
 import string
 import pyperclip
 import csv
+from Crypto.Random import get_random_bytes
 from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Hash import SHA256
+
+#get_random_bytes(32) later
 
 # LEGENDA
 # main -> 0
@@ -118,14 +121,14 @@ class DatabaseHandler:
 
             self.cursor.execute('''
                 CREATE TABLE IF NOT EXISTS password_db (
-                    name VARCHAR(255) UNIQUE NOT NULL,
-                    cipher_pass VARCHAR(255) NOT NULL,
-                    iv_pass VARCHAR(255) NOT NULL 
+                    name TEXT UNIQUE NOT NULL,
+                    cipher_pass TEXT NOT NULL,
+                    iv_pass TEXT NOT NULL 
                 )''')
 
             self.cursor.execute('''
                 CREATE TABLE IF NOT EXISTS master_hash (
-                    hash VARCHAR(255) NOT NULL
+                    hash TEXT NOT NULL
                 )''')
 
             conn.commit()
@@ -273,15 +276,15 @@ class Main(QWidget):
         layout = QVBoxLayout(create_master)
 
         self.label_create_master = QLabel("choose a master master_password:", create_master)
-        self.line_create_master1 = QLineEdit(create_master)
-        self.line_create_master2 = QLineEdit(create_master)
+        self.line_create_master = QLineEdit(create_master)
+        self.line_create_master_check = QLineEdit(create_master)
         self.button_create_master = QPushButton("enter", create_master)
         self.error_label_create_master = QLabel("error", create_master)
         self.error_label_create_master.hide()
 
         layout.addWidget(self.label_create_master)
-        layout.addWidget(self.line_create_master1)
-        layout.addWidget(self.line_create_master2)
+        layout.addWidget(self.line_create_master)
+        layout.addWidget(self.line_create_master_check)
         layout.addWidget(self.button_create_master)
         layout.addWidget(self.error_label_create_master)
 
@@ -295,16 +298,23 @@ class Main(QWidget):
         self.label_insert_master = QLabel("insert master password:", insert_master)
         self.line_insert_master = QLineEdit(insert_master)
         self.button_insert_master = QPushButton("enter", insert_master)
+        self.show_insert_master_button = QPushButton("show", insert_master)
         self.error_inser_master = QLabel("error", insert_master)
         self.error_inser_master.hide()
 
         layout.addWidget(self.label_insert_master)
         layout.addWidget(self.line_insert_master)
+        layout.addWidget(self.show_insert_master_button)
         layout.addWidget(self.button_insert_master)
         layout.addWidget(self.error_inser_master)
 
+        self.line_insert_master_str = ""
+        self.counter_insert_master = 0
+        self.line_insert_master.textChanged.connect(self.eventkeyboard_insert)
+
         self.stacked_widget.addWidget(insert_master)
         self.button_insert_master.clicked.connect(self.enter_button_insert_master)
+        self.show_insert_master_button.clicked.connect(self.button_insert_master_show)
 
     #WHAT?!
     def show_add_screen(self):
@@ -366,6 +376,20 @@ class Main(QWidget):
     def is_name_unique(self, name):
         return self.db_handler.is_name_unique(name)
 
+    def button_insert_master_show(self):
+        self.line_insert_master.setText(self.line_insert_master_str)
+
+    def eventkeyboard_insert(self):
+        if self.line_insert_master.text():
+            if len(self.line_insert_master.text()) > self.counter_insert_master:
+                self.line_insert_master_str += self.line_insert_master.text()[-1]
+                self.counter_insert_master = len(self.line_insert_master.text())
+                self.line_insert_master.setText("*" * len(self.line_insert_master.text()))
+            elif len(self.line_insert_master.text()) < self.counter_insert_master:
+                self.line_insert_master_str = self.line_insert_master_str[:-1]
+                self.counter_insert_master = len(self.line_insert_master.text())
+                self.line_insert_master.setText("*" * len(self.line_insert_master.text()))
+
     def add_screen_button(self):
         name = self.name_line_add.text()
         password_clear = self.password_line_add.text()
@@ -403,10 +427,10 @@ class Main(QWidget):
         self.show_main_screen()
 
     def enter_button_create_master(self):
-        if self.line_create_master1.text() != "null" and self.line_create_master1.text() and self.line_create_master2.text() and self.line_create_master1.text() == self.line_create_master2.text():
+        if self.line_create_master.text() != "null" and self.line_create_master.text() and self.line_create_master_check.text() and self.line_create_master.text() == self.line_create_master_check.text():
             global master_pass
-            master_pass = self.line_create_master1.text()
-            line = self.line_create_master1.text()
+            master_pass = self.line_create_master.text()
+            line = self.line_create_master.text()
             line_encoded = str.encode(line)
             hash256 = SHA256.new(line_encoded)
             hexhash256_hash = hash256.hexdigest()
@@ -420,9 +444,9 @@ class Main(QWidget):
         return self.db_handler.detect_master()
 
     def enter_button_insert_master(self):
-        if self.line_insert_master.text() and self.check_hash():
+        if self.line_insert_master_str and self.check_hash():
             global master_pass
-            master_pass = self.line_insert_master.text()
+            master_pass = self.line_insert_master_str
             self.show_main_screen()
         else:
             self.error_inser_master.show()
@@ -430,7 +454,7 @@ class Main(QWidget):
     def check_hash(self):
         db_handler = DatabaseHandler()
         v_hash = db_handler.fetch_all('SELECT hash FROM master_hash LIMIT 1')[0][0]
-        line = self.line_insert_master.text()
+        line = self.line_insert_master_str
         line_encoded = str.encode(line)
         hash256 = SHA256.new(line_encoded)
         hexhash256_hash = hash256.hexdigest()
