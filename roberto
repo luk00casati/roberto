@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from PySide6.QtWidgets import *
+from PySide6.QtWidgets import QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QLineEdit, QScrollArea, QStackedWidget, QWidget, QApplication, QFileDialog
 import sys
 import os
 import sqlite3
@@ -13,14 +13,13 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Hash import SHA256
 
-#get_random_bytes(32) later
-
 # LEGENDA
 # main -> 0
 # add_frame -> 1
 # asking_frame -> 2
 # creating_master -> 3 *
 # insert_master -> 4 *
+# option -> 5 *
 
 master_pass = "null"
 
@@ -33,10 +32,14 @@ if not os.path.exists(workig_dir):
 
 def gen_masterkey(master_pass):
     master_pass_encoded = str.encode(master_pass)
+    master_pass_str = master_pass_encoded.decode('UTF-8')
 
-    fix_salt = b"dC\x9aR\xec\xb3\x8dr\xc4M\\\x8e\x9b\xa9\x1fLS\xe9m +\xbb\x10\xbf\xb7x\xdd\xeb3-'\xb1"
+    db_handler = DatabaseHandler()
+    v_salt = db_handler.fetch_all('SELECT salt FROM roberto_table WHERE salt IS NOT NULL LIMIT 1')[0][0]
 
-    master_key = PBKDF2(master_pass_encoded, fix_salt, dkLen=32)
+    salt = bytes.fromhex(v_salt)
+
+    master_key = PBKDF2(master_pass_str, salt, dkLen=32)
     return master_key
 
 def generatepassword(length=15, options={}):
@@ -63,6 +66,19 @@ def generatepassword(length=15, options={}):
     password = ''.join(random.choice(chars) for _ in range(length))
     
     return password
+
+def export_csv(csv_file_name):
+    with open(csv_file_name, 'w', newline='') as csv_file:
+        csv_writer = csv.writer(csv_file)
+
+        dbhandler = DatabaseHandler()
+        elements_data = dbhandler.fetch_all('SELECT * FROM roberto_table')
+
+        column_names = [description[0] for description in dbhandler.description()]
+
+        csv_writer.writerow(column_names)
+
+        csv_writer.writerows(elements_data)
 
 class Element(QWidget):
     def __init__(self, main_instance, name, cipher_pass, iv_pass):
@@ -120,15 +136,12 @@ class DatabaseHandler:
             self.cursor = conn.cursor()
 
             self.cursor.execute('''
-                CREATE TABLE IF NOT EXISTS password_db (
-                    name TEXT UNIQUE NOT NULL,
-                    cipher_pass TEXT NOT NULL,
-                    iv_pass TEXT NOT NULL 
-                )''')
-
-            self.cursor.execute('''
-                CREATE TABLE IF NOT EXISTS master_hash (
-                    hash TEXT NOT NULL
+                CREATE TABLE IF NOT EXISTS roberto_table (
+                    name TEXT UNIQUE,
+                    cipher_pass TEXT,
+                    iv_pass TEXT,
+                    hash TEXT,
+                    salt TEXT
                 )''')
 
             conn.commit()
@@ -154,30 +167,44 @@ class DatabaseHandler:
             print(f"Error fetching data for query '{query}': {e}")
             return []
 
-    def is_name_unique(self, name):
-        query = 'SELECT COUNT(*) FROM password_db WHERE name = ?'
-        parameters = (name,)
-        count = self.fetch_all(query, parameters)[0][0]
-        return count == 0
+    def description(self):
+        try:
+            return self.cursor.description
+        except sqlite3.Error as e:
+            print(f"Error fetching data for descriptor: {e}")
+            return []
+
+    def is_name_unique(self):
+        query = 'SELECT COUNT(name) FROM roberto_table WHERE name IS NOT NULL'
+        count = self.fetch_all(query)[0][0]
+        if count > 0:
+            return False
+        else:
+            return True
 
     def detect_master(self):
-        query = 'SELECT COUNT(hash) FROM master_hash'
+        query = 'SELECT COUNT(hash) FROM roberto_table WHERE hash IS NOT NULL'
         count = self.fetch_all(query)[0][0]
         return count > 0
 
     def add_password(self, name, cipher_pass, iv_pass):
-        query = 'INSERT INTO password_db (name, cipher_pass, iv_pass) VALUES (?, ?, ?)'
+        query = 'INSERT INTO roberto_table (name, cipher_pass, iv_pass) VALUES (?, ?, ?)'
         parameters = (name, cipher_pass, iv_pass)
         self.execute_query(query, parameters)
 
     def delete_password(self, name):
-        query = 'DELETE FROM password_db WHERE name = (?)'
+        query = 'DELETE FROM roberto_table WHERE name = (?)'
         parameters = (name,)
         self.execute_query(query, parameters)
 
     def insert_hash(self, v_hash):
-        query = 'INSERT INTO master_hash (hash) VALUES (?)';
+        query = 'INSERT INTO roberto_table (hash) VALUES (?)';
         parameters = (v_hash,)
+        self.execute_query(query, parameters)
+
+    def insert_salt(self, v_salt):
+        query = 'INSERT INTO roberto_table (salt) VALUES (?)';
+        parameters = (v_salt,)
         self.execute_query(query, parameters)
 
     def __del__(self):
@@ -224,6 +251,7 @@ class Main(QWidget):
 
         self.add_button_bar.clicked.connect(self.show_add_screen)
         self.search_bar.clicked.connect(self.update_elements)
+        self.option_bar.clicked.connect(self.show_import_export)
         self.stacked_widget.addWidget(main_screen)
 
     def setup_add_screen(self):
@@ -316,6 +344,47 @@ class Main(QWidget):
         self.button_insert_master.clicked.connect(self.enter_button_insert_master)
         self.show_insert_master_button.clicked.connect(self.button_insert_master_show)
 
+    def setup_import_export(self):
+        import_export_master = QWidget(self)
+        layout = QVBoxLayout(import_export_master)
+
+        self.import_export_export_button = QPushButton("export", import_export_master)
+        self.import_export_import_button = QPushButton("import", import_export_master)
+        self.import_export_back_button = QPushButton("back", import_export_master)
+        self.import_export_error_label = QLabel("done", import_export_master)
+
+        layout.addWidget(self.import_export_export_button)
+        layout.addWidget(self.import_export_import_button)
+        layout.addWidget(self.import_export_back_button)
+        layout.addWidget(self.import_export_error_label)
+
+        self.import_export_error_label.hide()
+
+        self.stacked_widget.addWidget(import_export_master)
+
+        self.import_export_back_button.clicked.connect(self.option_back_button)
+        self.import_export_export_button.clicked.connect(self.show_export_file)
+    
+    def setup_export_file(self):
+        export_file = QWidget(self)
+        dialog = QFileDialog
+        filename = dialog.getSaveFileName(self, "export csv", user_name, "*.csv")
+        selectedfilename = filename[0]
+        if selectedfilename[-4:] != ".cvs":
+            selectedfilename = selectedfilename + ".csv"
+        if dialog.accept:
+            export_csv(selectedfilename)
+            self.show_import_export()
+            self.import_export_error_label.show()
+            self.import_export_error_label.setText("done")
+        else:
+            self.show_import_export()
+            self.import_export_error_label.show()
+            self.import_export_error_label.setText("error")
+        
+        self.stacked_widget.addWidget(export_file)
+        
+
     #WHAT?!
     def show_add_screen(self):
         self.error_label_add.hide()
@@ -330,23 +399,35 @@ class Main(QWidget):
         self.stacked_widget.setCurrentIndex(2)
 
     def show_create_master_password(self):
-        self.setup_create_master()
+        self.setup_create_master() 
+        self.line_create_master.clear()
+        self.line_create_master_check.clear()
         self.stacked_widget.setCurrentIndex(2)
 
     def show_insert_master_password(self):
         self.setup_insert_master()
+        self.line_insert_master.clear()
         self.stacked_widget.setCurrentIndex(2)
+
+    def show_import_export(self):
+        self.setup_import_export()
+        self.stacked_widget.setCurrentIndex(3)
+
+    def show_export_file(self):
+        self.setup_export_file()
+        self.stacked_widget.setCurrentIndex(4)
 
     def update_elements(self):
         if not self.text_input_bar.text():
             self.clear_layout(self.scroll_layout)
 
             db_handler = DatabaseHandler()
-            elements_data = db_handler.fetch_all('SELECT name, cipher_pass, iv_pass FROM password_db')
+            elements_data = db_handler.fetch_all('SELECT name, cipher_pass, iv_pass FROM roberto_table WHERE name IS NOT NULL AND cipher_pass IS NOT NULL AND iv_pass IS NOT NULL')
 
-            for name, cipher_pass, iv_pass in elements_data:
-                element = Element(self, name, cipher_pass, iv_pass)
-                self.scroll_layout.addWidget(element)
+            if elements_data:
+                for name, cipher_pass, iv_pass in elements_data:
+                    element = Element(self, name, cipher_pass, iv_pass)
+                    self.scroll_layout.addWidget(element)
 
             self.scroll_content.setLayout(self.scroll_layout)
 
@@ -355,10 +436,10 @@ class Main(QWidget):
             search_phrase = f"%{self.text_input_bar.text()}%"
 
             db_handler = DatabaseHandler()
-            elements_data = db_handler.fetch_all('SELECT name FROM password_db WHERE name LIKE ?', (search_phrase,))
+            elements_data = db_handler.fetch_all('SELECT name FROM roberto_table WHERE name IS NOT NULL LIKE ?', (search_phrase,))
 
-            for name, password in elements_data:
-                element = Element(self, name, password)
+            for name, cipher_pass, iv_pass in elements_data:
+                element = Element(self, name, cipher_pass, iv_pass)
                 self.scroll_layout.addWidget(element)
 
             self.scroll_content.setLayout(self.scroll_layout)
@@ -373,11 +454,15 @@ class Main(QWidget):
     def gen_password(self):
         self.password_line_add.setText(generatepassword())
 
-    def is_name_unique(self, name):
-        return self.db_handler.is_name_unique(name)
+    def is_name_unique(self):
+        return self.db_handler.is_name_unique()
 
     def button_insert_master_show(self):
         self.line_insert_master.setText(self.line_insert_master_str)
+
+    def option_back_button(self):
+        self.import_export_error_label.hide()
+        self.show_main_screen()
 
     def eventkeyboard_insert(self):
         if self.line_insert_master.text():
@@ -389,13 +474,16 @@ class Main(QWidget):
                 self.line_insert_master_str = self.line_insert_master_str[:-1]
                 self.counter_insert_master = len(self.line_insert_master.text())
                 self.line_insert_master.setText("*" * len(self.line_insert_master.text()))
+        elif not self.line_insert_master.text():
+            self.counter_insert_master = 0
+            self.line_insert_master_str = ""
 
     def add_screen_button(self):
         name = self.name_line_add.text()
         password_clear = self.password_line_add.text()
 
         if name and password_clear:
-            if self.is_name_unique(name):
+            if self.is_name_unique():
                 password_clear_encoded = str.encode(password_clear)
                 #cript
                 if master_pass and master_pass != "null":
@@ -406,11 +494,11 @@ class Main(QWidget):
                     iv = cipher.iv
                     ivhex = iv.hex()
 
-                self.db_handler.add_password(name, cipherhex, ivhex)
-                self.name_line_add.clear()
-                self.password_line_add.clear()
-                self.show_main_screen()
-                self.error_label_add.hide()
+                    self.db_handler.add_password(name, cipherhex, ivhex)
+                    self.name_line_add.clear()
+                    self.password_line_add.clear()
+                    self.show_main_screen()
+                    self.error_label_add.hide()
             else:
                 self.error_label_add.setText("Name already exists. Please choose a different name.")
                 self.error_label_add.show()
@@ -436,6 +524,9 @@ class Main(QWidget):
             hexhash256_hash = hash256.hexdigest()
             db_handler = DatabaseHandler()
             db_handler.insert_hash(hexhash256_hash)
+            b_salt = get_random_bytes(32)
+            hex_salt = b_salt.hex()
+            db_handler.insert_salt(hex_salt)
             self.show_main_screen()
         else:
             self.error_label_create_master.show()
@@ -453,7 +544,7 @@ class Main(QWidget):
 
     def check_hash(self):
         db_handler = DatabaseHandler()
-        v_hash = db_handler.fetch_all('SELECT hash FROM master_hash LIMIT 1')[0][0]
+        v_hash = db_handler.fetch_all('SELECT hash FROM roberto_table WHERE hash IS NOT NULL LIMIT 1')[0][0]
         line = self.line_insert_master_str
         line_encoded = str.encode(line)
         hash256 = SHA256.new(line_encoded)
