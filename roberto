@@ -13,15 +13,7 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Hash import SHA256
 
-# LEGENDA
-# main -> 0
-# add_frame -> 1
-# asking_frame -> 2
-# creating_master -> 3 *
-# insert_master -> 4 *
-# option -> 5 *
-
-master_pass = "null"
+master_pass = "null" #need to remove
 
 user_name = os.getlogin()
 
@@ -80,6 +72,44 @@ def export_csv(csv_file_name):
 
         csv_writer.writerows(elements_data)
 
+def import_csv(csv_file_name):
+    db_connection = sqlite3.connect(f"/home/{user_name}/.roberto/roberto.db")
+    cursor = db_connection.cursor()
+    try:
+        cursor.execute('DROP TABLE roberto_table')
+
+        with open(csv_file_name, 'r') as csv_file:
+            csv_reader = csv.reader(csv_file)
+
+            cursor.execute('''
+                CREATE TABLE roberto_table (
+                    name TEXT,
+                    cipher_pass TEXT,
+                    iv_pass TEXT,
+                    hash TEXT,
+                    salt TEXT
+                )''')
+
+            insert_all_query = "INSERT INTO roberto_table (name, cipher_pass, iv_pass, hash, salt) VALUES (?, ?, ?, ?, ?)"
+        
+            next(csv_reader) #skip header
+
+            for row in csv_reader:
+                #None will insert NULL in db
+                row = [None if value == "" else value for value in row]
+                cursor.execute(insert_all_query, row)
+
+        db_connection.commit()
+
+    except sqlite3.Error as e:
+        print(f"SQLite error: {e}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    finally:
+        cursor.close()
+        db_connection.close()
+        sys.exit()
+
 class Element(QWidget):
     def __init__(self, main_instance, name, cipher_pass, iv_pass):
         super().__init__()
@@ -137,7 +167,7 @@ class DatabaseHandler:
 
             self.cursor.execute('''
                 CREATE TABLE IF NOT EXISTS roberto_table (
-                    name TEXT UNIQUE,
+                    name TEXT,
                     cipher_pass TEXT,
                     iv_pass TEXT,
                     hash TEXT,
@@ -167,20 +197,18 @@ class DatabaseHandler:
             print(f"Error fetching data for query '{query}': {e}")
             return []
 
+    def is_name_unique(self, name):
+        parameters = (name,) 
+        query = 'SELECT COUNT(*) FROM roberto_table WHERE name LIKE (?)'
+        count = self.fetch_all(query, parameters)[0][0]
+        return count == 0
+
     def description(self):
         try:
             return self.cursor.description
         except sqlite3.Error as e:
             print(f"Error fetching data for descriptor: {e}")
             return []
-
-    def is_name_unique(self):
-        query = 'SELECT COUNT(name) FROM roberto_table WHERE name IS NOT NULL'
-        count = self.fetch_all(query)[0][0]
-        if count > 0:
-            return False
-        else:
-            return True
 
     def detect_master(self):
         query = 'SELECT COUNT(hash) FROM roberto_table WHERE hash IS NOT NULL'
@@ -348,11 +376,15 @@ class Main(QWidget):
         import_export_master = QWidget(self)
         layout = QVBoxLayout(import_export_master)
 
+        warming_label_str = "import will wipe the database and application will be closed"
+
+        self.import_export_warning_label = QLabel(warming_label_str, import_export_master)
         self.import_export_export_button = QPushButton("export", import_export_master)
         self.import_export_import_button = QPushButton("import", import_export_master)
         self.import_export_back_button = QPushButton("back", import_export_master)
-        self.import_export_error_label = QLabel("done", import_export_master)
+        self.import_export_error_label = QLabel(import_export_master)
 
+        layout.addWidget(self.import_export_warning_label)
         layout.addWidget(self.import_export_export_button)
         layout.addWidget(self.import_export_import_button)
         layout.addWidget(self.import_export_back_button)
@@ -364,13 +396,14 @@ class Main(QWidget):
 
         self.import_export_back_button.clicked.connect(self.option_back_button)
         self.import_export_export_button.clicked.connect(self.show_export_file)
+        self.import_export_import_button.clicked.connect(self.show_import_file)
     
     def setup_export_file(self):
         export_file = QWidget(self)
         dialog = QFileDialog
         filename = dialog.getSaveFileName(self, "export csv", user_name, "*.csv")
         selectedfilename = filename[0]
-        if selectedfilename[-4:] != ".cvs":
+        if selectedfilename[-4:] != ".csv":
             selectedfilename = selectedfilename + ".csv"
         if dialog.accept:
             export_csv(selectedfilename)
@@ -383,6 +416,20 @@ class Main(QWidget):
             self.import_export_error_label.setText("error")
         
         self.stacked_widget.addWidget(export_file)
+
+    def setup_import_file(self):
+        import_file = QWidget(self)
+        dialog = QFileDialog
+        filename = dialog.getOpenFileName(self, "export csv", user_name, "*.csv")
+        selectedfilename = filename[0]
+        if dialog.accept:
+            import_csv(selectedfilename)
+        else:
+            self.show_import_export()
+            self.import_export_error_label.show()
+            self.import_export_error_label.setText("error")
+        
+        self.stacked_widget.addWidget(import_file)
         
 
     #WHAT?!
@@ -396,7 +443,7 @@ class Main(QWidget):
 
     def show_asking_screen(self, name):
         self.setup_asking_screen(name)
-        self.stacked_widget.setCurrentIndex(2)
+        self.stacked_widget.setCurrentIndex(3)
 
     def show_create_master_password(self):
         self.setup_create_master() 
@@ -411,11 +458,15 @@ class Main(QWidget):
 
     def show_import_export(self):
         self.setup_import_export()
-        self.stacked_widget.setCurrentIndex(3)
+        self.stacked_widget.setCurrentIndex(4)
 
     def show_export_file(self):
         self.setup_export_file()
         self.stacked_widget.setCurrentIndex(4)
+
+    def show_import_file(self):
+        self.setup_import_file()
+        self.stacked_widget.setCurrentIndex(5)
 
     def update_elements(self):
         if not self.text_input_bar.text():
@@ -454,8 +505,8 @@ class Main(QWidget):
     def gen_password(self):
         self.password_line_add.setText(generatepassword())
 
-    def is_name_unique(self):
-        return self.db_handler.is_name_unique()
+    def is_name_unique(self, name):
+        return self.db_handler.is_name_unique(name)
 
     def button_insert_master_show(self):
         self.line_insert_master.setText(self.line_insert_master_str)
@@ -483,7 +534,7 @@ class Main(QWidget):
         password_clear = self.password_line_add.text()
 
         if name and password_clear:
-            if self.is_name_unique():
+            if self.is_name_unique(name):
                 password_clear_encoded = str.encode(password_clear)
                 #cript
                 if master_pass and master_pass != "null":
